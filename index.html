@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gerador de Torneios de Xadrez</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+
+    <!-- Vue Js-->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+
+<body>
+    <div id="app">
+        <h1 class="text-center card-title">{{ message }}</h1>
+
+        <div class="container-fluid">
+            <div class="row p-3">
+                <div class="col-12 col-sm-12 col-md-6 col-lg-6" v-for="gerador in geradores" :key="gerador.nome">
+                    <div class="card m-3 text-center">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ gerador.nome }}</h5>
+                            <p class="card-text">{{ gerador.descricao }}</p>
+                            <a :href="gerador.link" class="btn btn-primary">Acessar</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+        crossorigin="anonymous"></script>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    message: 'Bem vindo ao gerador de torneios!',
+                    geradores: [
+                        {
+                            nome: 'Pareamento Simples',
+                            descricao: 'Sorteio rápido de confrontos sem critério de pontuação. Ideal para amistosos, mata-mata informais ou eventos recreativos.',
+                            link: 'pareamento_simples.html'
+                        },
+                        {
+                            nome: 'Sistema Suíço Simples',
+                            descricao: 'Torneio no sistema suíço básico, com pareamento por pontuação e controle de rodadas, indicado para torneios pequenos.',
+                            link: 'sistema_suico.html'
+                        },
+                        {
+                            nome: 'Sistema Suíço',
+                            descricao: 'Sistema suíço avançado com controle de cores, prevenção de confrontos repetidos, bye automático e critérios formais de desempate (Buchholz).',
+                            link: 'sistema_suico_completo_2.html'
+                        }
+                    ]
+
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>
