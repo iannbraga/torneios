@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <title>Gerenciador de Torneios de Xadrez – Sistema Suíço Avançado</title>
+  <title>Gerenciador de Torneios de Xadrez – Sistema Suíço</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <!-- Bootstrap 5 -->
@@ -16,7 +16,7 @@
 <body class="bg-light">
 
   <div id="app" class="container py-4">
-    <h1 class="mb-4">Gerenciador de Torneios de Xadrez (Suíço Avançado)</h1>
+    <h1 class="mb-4">Gerenciador de Torneios de Xadrez (Sistema Suíço)</h1>
 
     <!-- Configuração -->
     <div class="card mb-4">
@@ -45,8 +45,8 @@
         </div>
 
         <div class="mt-3 d-flex gap-2">
-          <button @click="startTournament" class="btn btn-primary">Iniciar</button>
-          <button @click="exportCSV" class="btn btn-outline-secondary">Exportar CSV</button>
+          <button @click="startTournament" class="btn btn-primary" :disabled="!canStart">Iniciar</button>
+          <button @click="exportCSV" class="btn btn-outline-secondary" :disabled="!rounds.length">Exportar CSV</button>
           <button @click="resetTournament" class="btn btn-outline-danger">Resetar</button>
         </div>
       </div>
@@ -59,6 +59,7 @@
         <table class="table">
           <thead>
             <tr>
+              <th>Mesa</th>
               <th>Brancas</th>
               <th>Pretas</th>
               <th>Resultado</th>
@@ -66,27 +67,43 @@
           </thead>
           <tbody>
             <tr v-for="(game, gIndex) in round.games" :key="gIndex">
+              <td>{{ gIndex + 1 }}</td>
               <td>{{ game.white }}</td>
               <td>{{ game.black }}</td>
               <td v-if="!game.bye">
-                <select v-model="game.result" @change="applyResult(game)" class="form-select">
+                <select v-model="game.result" @change="applyResult(rIndex, gIndex)" class="form-select">
                   <option value="">—</option>
                   <option value="1-0">1–0</option>
                   <option value="0-1">0–1</option>
                   <option value="0.5-0.5">½–½</option>
                 </select>
               </td>
-              <td v-else>Bye (1 ponto)</td>
+              <td v-else><span class="badge bg-info">Bye (1 ponto)</span></td>
             </tr>
           </tbody>
         </table>
+        <div v-if="rIndex === rounds.length - 1 && !isRoundComplete(rIndex)" class="alert alert-warning">
+          Aguardando resultados desta rodada
+        </div>
+        <div v-if="rIndex === rounds.length - 1 && isRoundComplete(rIndex) && rounds.length < tournament.rounds"
+          class="mt-3">
+          <button @click="generateNextRound" class="btn btn-success">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+              class="bi bi-plus-circle me-1" viewBox="0 0 16 16">
+              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
+              <path
+                d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z" />
+            </svg>
+            Gerar Rodada {{ rounds.length + 1 }}
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Classificação -->
     <div v-if="players.length" class="card">
       <div class="card-body">
-        <h4>Classificação</h4>
+        <h4>Classificação Geral</h4>
         <table class="table table-striped">
           <thead>
             <tr>
@@ -94,14 +111,16 @@
               <th>Jogador</th>
               <th>Pontos</th>
               <th>Buchholz</th>
+              <th>Brancas/Pretas</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(p, i) in rankedPlayers" :key="p.name">
               <td>{{ i + 1 }}</td>
               <td>{{ p.name }}</td>
-              <td>{{ p.points }}</td>
-              <td>{{ p.buchholz }}</td>
+              <td><strong>{{ p.points.toFixed(1) }}</strong></td>
+              <td>{{ p.buchholz.toFixed(1) }}</td>
+              <td>{{ p.whites }}/{{ p.blacks }}</td>
             </tr>
           </tbody>
         </table>
@@ -115,168 +134,369 @@
     createApp({
       data() {
         return {
-          tournament: { name: '', timeControl: 'Rápidas', rounds: 1 },
+          tournament: { name: 'Torneio Suíço', timeControl: 'Rápidas', rounds: 5 },
           participantsText: '',
           players: [],
           rounds: []
         }
       },
       computed: {
+        canStart() {
+          return this.participantsText.trim().split('\n').filter(Boolean).length >= 2;
+        },
         rankedPlayers() {
           return [...this.players]
             .map(p => ({ ...p, buchholz: this.calcBuchholz(p) }))
-            .sort((a, b) => b.points - a.points || b.buchholz - a.buchholz);
+            .sort((a, b) => {
+              if (b.points !== a.points) return b.points - a.points;
+              return b.buchholz - a.buchholz;
+            });
         }
       },
       methods: {
         shuffle(array) {
-          for (let i = array.length - 1; i > 0; i--) {
+          const arr = [...array];
+          for (let i = arr.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [array[i], array[j]] = [array[j], array[i]];
+            [arr[i], arr[j]] = [arr[j], arr[i]];
           }
-          return array;
+          return arr;
         },
+
         startTournament() {
-          this.players = this.participantsText
-            .split('\n').map(p => p.trim()).filter(Boolean)
-            .map(p => ({
-              name: p,
-              points: 0,
-              hadBye: false,
-              whites: 0,
-              blacks: 0,
-              lastColor: null,
-              opponents: []
-            }));
+          const names = this.participantsText
+            .split('\n')
+            .map(p => p.trim())
+            .filter(Boolean);
+
+          if (names.length < 2) {
+            alert('É necessário pelo menos 2 participantes');
+            return;
+          }
+
+          this.players = names.map(name => ({
+            name,
+            points: 0,
+            hadBye: false,
+            whites: 0,
+            blacks: 0,
+            colorHistory: [],
+            opponents: []
+          }));
+
           this.rounds = [];
           this.generateNextRound();
-          this.save();
+        },
+        generateNextRound() {
+          if (this.rounds.length >= this.tournament.rounds) return;
+
+          const games = [];
+          const paired = new Set();
+
+          // 1️⃣ Agrupar por pontuação
+          const scoreGroups = {};
+          this.players.forEach(p => {
+            if (!scoreGroups[p.points]) scoreGroups[p.points] = [];
+            scoreGroups[p.points].push(p);
+          });
+
+          // Ordenar grupos (maior pontuação primeiro)
+          const orderedScores = Object.keys(scoreGroups)
+            .map(Number)
+            .sort((a, b) => b - a);
+
+          let floaters = [];
+
+          // 2️⃣ Processar grupos
+          orderedScores.forEach(score => {
+            let group = [...floaters, ...scoreGroups[score]];
+            floaters = [];
+
+            // Ordenar dentro do grupo (menos cores jogadas primeiro)
+            group.sort((a, b) =>
+              (a.whites + a.blacks) - (b.whites + b.blacks)
+            );
+
+            // Se ímpar, flutua o último
+            if (group.length % 2 === 1) {
+              floaters.push(group.pop());
+            }
+
+            // Emparceirar dentro do grupo
+            for (let i = 0; i < group.length; i += 2) {
+              const p1 = group[i];
+              const p2 = group[i + 1];
+
+              if (!p2) continue;
+
+              // Preferência de cores (não obrigatória)
+              let white = p1;
+              let black = p2;
+
+              const p1Diff = p1.whites - p1.blacks;
+              const p2Diff = p2.whites - p2.blacks;
+
+              if (p1Diff > p2Diff) {
+                white = p2; black = p1;
+              }
+
+              white.whites++;
+              black.blacks++;
+              white.colorHistory.push('white');
+              black.colorHistory.push('black');
+
+              white.opponents.push(black.name);
+              black.opponents.push(white.name);
+
+              paired.add(white.name);
+              paired.add(black.name);
+
+              games.push({
+                white: white.name,
+                black: black.name,
+                result: '',
+                bye: false,
+                applied: false
+              });
+            }
+          });
+
+          // 3️⃣ Bye (se sobrou alguém)
+          if (floaters.length === 1) {
+            const byePlayer = floaters[0];
+            byePlayer.points += 1;
+            byePlayer.hadBye = true;
+
+            games.push({
+              white: byePlayer.name,
+              black: '—',
+              result: '1-0',
+              bye: true,
+              applied: true
+            });
+          }
+
+          this.rounds.push({ games });
         },
 
         generateNextRound() {
-          if (this.rounds.length >= this.tournament.rounds) return;
+          if (this.rounds.length >= this.tournament.rounds) {
+            return;
+          }
 
           let sorted;
 
           if (this.rounds.length === 0) {
-            // Primeira rodada → sorteio aleatório
-            sorted = this.shuffle([...this.players]);
+            // Primeira rodada: embaralhar aleatoriamente
+            sorted = this.shuffle(this.players);
           } else {
-            // Demais rodadas → ordena por pontos
-            sorted = [...this.players].sort((a, b) => b.points - a.points);
+            // Rodadas seguintes: agrupar por pontuação
+            sorted = [...this.players].sort((a, b) => {
+              if (b.points !== a.points) return b.points - a.points;
+              return b.whites + b.blacks - (a.whites + a.blacks);
+            });
           }
-          const used = new Set();
+
           const games = [];
+          const paired = new Set();
 
-          // Bye
+          // Verificar se há número ímpar de jogadores
           if (sorted.length % 2 === 1) {
-            const bye = [...sorted].reverse().find(p => !p.hadBye);
-            bye.points += 1;
-            bye.hadBye = true;
-            bye.lastColor = null;
-            used.add(bye.name);
-            games.push({ white: bye.name, black: '—', bye: true });
-          }
+            // Encontrar jogador elegível para bye (que ainda não teve)
+            let byePlayer = null;
 
-          for (let i = 0; i < sorted.length; i++) {
-            const p1 = sorted[i];
-            if (used.has(p1.name)) continue;
-
-            let opponent = null;
-            for (let j = i + 1; j < sorted.length; j++) {
-              const p2 = sorted[j];
-              if (used.has(p2.name)) continue;
-              if (!p1.opponents.includes(p2.name)) {
-                opponent = p2;
+            // Procurar de baixo para cima (menor pontuação primeiro)
+            for (let i = sorted.length - 1; i >= 0; i--) {
+              if (!sorted[i].hadBye) {
+                byePlayer = sorted[i];
                 break;
               }
             }
-            if (!opponent) continue;
 
-            // Regras de cor
-            let white = p1;
-            let black = opponent;
-
-            // Evitar mesma cor consecutiva
-            if (p1.lastColor === 'white' && opponent.lastColor !== 'white') {
-              white = opponent; black = p1;
-            } else if (p1.lastColor === 'black' && opponent.lastColor !== 'black') {
-              white = p1; black = opponent;
+            // Se todos já tiveram bye, dar para quem teve há mais tempo
+            if (!byePlayer) {
+              byePlayer = sorted[sorted.length - 1];
             }
 
-            // Balanceamento geral
-            if (white.whites > white.blacks) [white, black] = [black, white];
+            byePlayer.points += 1;
+            byePlayer.hadBye = true;
+            paired.add(byePlayer.name);
+            games.push({
+              white: byePlayer.name,
+              black: '—',
+              result: '1-0',
+              bye: true,
+              applied: true
+            });
+          }
+
+          // Emparceirar jogadores
+          for (let i = 0; i < sorted.length; i++) {
+            if (paired.has(sorted[i].name)) continue;
+
+            const p1 = sorted[i];
+            let p2 = null;
+
+            // Procurar oponente mais próximo em pontuação que ainda não jogou contra
+            for (let j = i + 1; j < sorted.length; j++) {
+              if (paired.has(sorted[j].name)) continue;
+              if (!p1.opponents.includes(sorted[j].name)) {
+                p2 = sorted[j];
+                break;
+              }
+            }
+
+            // Se não encontrou, procurar qualquer oponente disponível
+            if (!p2) {
+              for (let j = i + 1; j < sorted.length; j++) {
+                if (paired.has(sorted[j].name)) continue;
+                p2 = sorted[j];
+                break;
+              }
+            }
+
+            if (!p2) continue;
+
+            // Determinar cores - ALTERNÂNCIA ESTRITA
+            let white = null;
+            let black = null;
+
+            const p1LastColor = p1.colorHistory[p1.colorHistory.length - 1];
+            const p2LastColor = p2.colorHistory[p2.colorHistory.length - 1];
+
+            // Regra de alternância estrita
+            if (p1LastColor === 'white') {
+              // p1 DEVE jogar de pretas
+              white = p2;
+              black = p1;
+            } else if (p1LastColor === 'black') {
+              // p1 DEVE jogar de brancas
+              white = p1;
+              black = p2;
+            } else if (p2LastColor === 'white') {
+              // p2 DEVE jogar de pretas
+              white = p1;
+              black = p2;
+            } else if (p2LastColor === 'black') {
+              // p2 DEVE jogar de brancas
+              white = p2;
+              black = p1;
+            } else {
+              // Primeira rodada - balancear pelo total
+              const p1Diff = p1.whites - p1.blacks;
+              const p2Diff = p2.whites - p2.blacks;
+
+              if (p1Diff > p2Diff) {
+                white = p2; black = p1;
+              } else if (p2Diff > p1Diff) {
+                white = p1; black = p2;
+              } else {
+                // Totalmente balanceado - melhor ranqueado joga de brancas
+                white = p1; black = p2;
+              }
+            }
 
             white.whites++;
             black.blacks++;
-            white.lastColor = 'white';
-            black.lastColor = 'black';
-
+            white.colorHistory.push('white');
+            black.colorHistory.push('black');
             white.opponents.push(black.name);
             black.opponents.push(white.name);
 
-            used.add(white.name);
-            used.add(black.name);
+            paired.add(white.name);
+            paired.add(black.name);
 
-            games.push({ white: white.name, black: black.name, result: '', bye: false });
+            games.push({
+              white: white.name,
+              black: black.name,
+              result: '',
+              bye: false,
+              applied: false
+            });
           }
 
           this.rounds.push({ games });
-          this.save();
         },
 
-        applyResult(game) {
-          if (game._applied || game.bye) return;
+        applyResult(roundIndex, gameIndex) {
+          const game = this.rounds[roundIndex].games[gameIndex];
 
-          const w = this.players.find(p => p.name === game.white);
-          const b = this.players.find(p => p.name === game.black);
+          if (game.bye) return;
 
-          if (game.result === '1-0') w.points += 1;
-          if (game.result === '0-1') b.points += 1;
-          if (game.result === '0.5-0.5') { w.points += 0.5; b.points += 0.5; }
+          const white = this.players.find(p => p.name === game.white);
+          const black = this.players.find(p => p.name === game.black);
 
-          game._applied = true;
+          if (!white || !black) return;
 
-          const round = this.rounds[this.rounds.length - 1];
-          const finished = round.games.filter(g => !g.bye).every(g => g.result);
+          // Remover pontos anteriores se já havia sido aplicado
+          if (game.applied) {
+            if (game.previousResult === '1-0') {
+              white.points -= 1;
+            } else if (game.previousResult === '0-1') {
+              black.points -= 1;
+            } else if (game.previousResult === '0.5-0.5') {
+              white.points -= 0.5;
+              black.points -= 0.5;
+            }
+          }
 
-          if (finished) this.generateNextRound();
-          this.save();
+          // Aplicar novos pontos
+          if (game.result === '1-0') {
+            white.points += 1;
+          } else if (game.result === '0-1') {
+            black.points += 1;
+          } else if (game.result === '0.5-0.5') {
+            white.points += 0.5;
+            black.points += 0.5;
+          }
+
+          game.previousResult = game.result;
+          game.applied = game.result !== '';
+        },
+
+        isRoundComplete(roundIndex) {
+          const round = this.rounds[roundIndex];
+          return round.games.every(g => g.bye || (g.result && g.applied));
         },
 
         calcBuchholz(player) {
-          return player.opponents
-            .map(o => this.players.find(p => p.name === o)?.points || 0)
-            .reduce((a, b) => a + b, 0);
+          return player.opponents.reduce((sum, oppName) => {
+            const opp = this.players.find(p => p.name === oppName);
+            return sum + (opp ? opp.points : 0);
+          }, 0);
         },
 
         exportCSV() {
-          let csv = 'Rodada,Brancas,Pretas,Resultado\n';
-          this.rounds.forEach((r, i) => r.games.forEach(g => {
-            csv += `${i + 1},${g.white},${g.black},${g.result || 'BYE'}\n`;
-          }));
-          const blob = new Blob([csv], { type: 'text/csv' });
+          let csv = 'Rodada,Mesa,Brancas,Pretas,Resultado\n';
+          this.rounds.forEach((round, rIndex) => {
+            round.games.forEach((game, gIndex) => {
+              const result = game.bye ? 'BYE' : (game.result || 'Pendente');
+              csv += `${rIndex + 1},${gIndex + 1},${game.white},${game.black},${result}\n`;
+            });
+          });
+
+          csv += '\n\nClassificação Final\n';
+          csv += 'Posição,Jogador,Pontos,Buchholz\n';
+          this.rankedPlayers.forEach((p, i) => {
+            csv += `${i + 1},${p.name},${p.points.toFixed(1)},${p.buchholz.toFixed(1)}\n`;
+          });
+
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
           a.download = `${this.tournament.name || 'torneio'}.csv`;
           a.click();
         },
 
-        save() {
-          localStorage.setItem('chessTournament', JSON.stringify(this.$data));
-        },
-
-        load() {
-          const d = localStorage.getItem('chessTournament');
-          if (d) Object.assign(this.$data, JSON.parse(d));
-        },
-
         resetTournament() {
-          localStorage.removeItem('chessTournament');
-          location.reload();
+          if (confirm('Tem certeza que deseja resetar o torneio?')) {
+            this.tournament = { name: 'Torneio Suíço', timeControl: 'Rápidas', rounds: 5 };
+            this.participantsText = '';
+            this.players = [];
+            this.rounds = [];
+          }
         }
-      },
-      mounted() { this.load(); }
+      }
     }).mount('#app');
   </script>
 
